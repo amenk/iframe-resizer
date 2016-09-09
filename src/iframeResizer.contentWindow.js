@@ -10,7 +10,7 @@
  */
 
 
-;(function(window, undefined) {
+;(function(window) {
 	'use strict';
 
 	var
@@ -22,6 +22,7 @@
 		bodyObserver          = null,
 		bodyPadding           = '',
 		calculateWidth        = false,
+		customSelector        = '[data-iframe-height]',
 		doubleEventList       = {'resize':1,'click':1},
 		eventCancelTimer      = 128,
 		firstRun              = true,
@@ -51,19 +52,9 @@
 		widthCalcModeDefault  = 'scroll',
 		widthCalcMode         = widthCalcModeDefault,
 		win                   = window,
-		messageCallback       = function(){ warn('MessageCallback function not defined'); },
+		messageCallback       = function(){warn('MessageCallback function not defined');},
 		readyCallback         = function(){},
-		pageInfoCallback      = function(){},
-		customCalcMethods     = {
-			height: function(){
-				warn('Custom height calculation function not defined');
-				return document.documentElement.offsetHeight;
-			}, 
-			width: function(){
-				warn('Custom width calculation function not defined');
-				return document.body.scrollWidth;
-			}
-		};
+		pageInfoCallback      = function(){};
 
 
 	function addEventListener(el,evt,func){
@@ -198,6 +189,8 @@
 		inPageLinks.enable = (undefined !== data[12]) ? strBool(data[12]): false;
 		resizeFrom         = (undefined !== data[13]) ? data[13]         : resizeFrom;
 		widthCalcMode      = (undefined !== data[14]) ? data[14]         : widthCalcMode;
+		customSelector     = (undefined !== data[15]) ? data[15]         : customSelector;
+		console.log(data);
 	}
 
 	function readDataFromPage(){
@@ -213,20 +206,8 @@
 			widthCalcMode       = ('widthCalculationMethod'  in data) ? data.widthCalculationMethod  : widthCalcMode;
 		}
 
-		function setupCustomCalcMethods(calcMode, calcFunc){
-			if ('function' === typeof calcMode) {
-				log('Setup custom ' + calcFunc + 'CalcMethod');
-				customCalcMethods[calcFunc] = calcMode;
-				calcMode = 'custom';
-			}
-
-			return calcMode;
-		}
-
 		if(('iFrameResizer' in window) && (Object === window.iFrameResizer.constructor)) {
 			readData();
-			heightCalcMode = setupCustomCalcMethods(heightCalcMode, 'height');
-			widthCalcMode  = setupCustomCalcMethods(widthCalcMode,  'width');
 		}
 
 		log('TargetOrigin for parent set to: ' + targetOriginDefault);
@@ -746,15 +727,10 @@
 		];
 	}
 
-	function getTaggedElements(side,tag){
-		function noTaggedElementsFound(){
-			warn('No tagged elements ('+tag+') found on page');
-			return height; //current height
-		}
+	function getSelectorElements(side,selector){
+		var elements = document.querySelectorAll(selector);
 
-		var elements = document.querySelectorAll('['+tag+']');
-
-		return 0 === elements.length ?  noTaggedElementsFound() : getMaxElement(side,elements);
+		return 0 === elements.length ? null : getMaxElement(side,elements);
 	}
 
 	function getAllElements(){
@@ -773,10 +749,6 @@
 
 			bodyScroll: function getBodyScrollHeight(){
 				return document.body.scrollHeight;
-			},
-
-			custom: function getCustomWidth(){
-				return customCalcMethods.height();
 			},
 
 			documentElementOffset: function getDEOffsetHeight(){
@@ -804,8 +776,19 @@
 			},
 
 			taggedElement: function getTaggedElementsHeight(){
-				return getTaggedElements('bottom','data-iframe-height');
+				var h = getSelectorElements('bottom', customSelector);
+				function noTaggedElementsFound(){
+					warn('No elements matching the selector ('+selector+') found on page');
+					return height;
+				}
+				return (h == null) ? noTaggedElementsFound() : h;
+			},
+
+			taggedOrLowestElement: function getTaggedOrLowestElementsHeight(){
+				var h = getSelectorElements('bottom', customSelector);
+				return (h == null) ? this.lowestElement() : h;
 			}
+
 		},
 
 		getWidth = {
@@ -815,10 +798,6 @@
 
 			bodyOffset: function getBodyOffsetWidth(){
 				return document.body.offsetWidth;
-			},
-
-			custom: function getCustomWidth(){
-				return customCalcMethods.width();
 			},
 
 			documentElementScroll: function getDEScrollWidth(){
@@ -846,7 +825,7 @@
 			},
 
 			taggedElement: function getTaggedElementsWidth(){
-				return getTaggedElements('right', 'data-iframe-width');
+				return getSelectorElements('right', '[data-iframe-width]');
 			}
 		};
 
@@ -984,21 +963,12 @@
 		}
 
 		function initFromParent(){
-			function fireInit(){
-				initMsg = event.data;
-				target  = event.source;
+			initMsg = event.data;
+			target  = event.source;
 
-				init();
-				firstRun = false;
-				setTimeout(function(){ initLock = false;},eventCancelTimer);
-			}
-
-			if (document.body){
-				fireInit();
-			} else {
-				log('Waiting for page ready');
-				addEventListener(window,'readystatechange',initFromParent);
-			}
+			init();
+			firstRun = false;
+			setTimeout(function(){ initLock = false;},eventCancelTimer);
 		}
 
 		function resetFromParent(){
@@ -1060,7 +1030,6 @@
 			case 'resize':
 				resizeFromParent();
 				break;
-			case 'inPageLink':
 			case 'moveToAnchor':
 				moveToAnchor();
 				break;
@@ -1103,21 +1072,6 @@
 	addEventListener(window, 'message', receiver);
 	chkLateLoaded();
 
-	// TEST CODE START //
-
-	//Create test hooks
-
-	function mockMsgListener(msgObject){
-		receiver(msgObject);
-		return win;
-	}
-
-	win={};
-
-	removeEventListener(window, 'message', receiver);
-
-	define([], function() {return mockMsgListener;});
-
-	// TEST CODE END //
+	
 
 })(window || {});
